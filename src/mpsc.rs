@@ -1,46 +1,60 @@
-use tokio::sync::mpsc::{self, error::SendError};
+use crate::tools;
+
 use tracing::{
-    debug_span,
+    debug_span, Span,
+    debug,
     instrument::{Instrument, Instrumented}
 };
 
-use crate::tools;
+use tokio::sync::mpsc::{self, error::SendError};
+use uuid::Uuid;
 
 pub fn channel<T>(buffer: usize) -> (Sender<T>, Receiver<T>) {
-    let (sender, receiver) = mpsc::channel::<T>(buffer);
-    let uuid = uuid::Uuid::new_v4();
-    let span = debug_span!("mpsc", uuid = tools::base64_text(uuid.as_bytes()));
-    (sender.instrument(span.clone()).into(), receiver.instrument(span).into())
+    let (tx, rx) = mpsc::channel::<T>(buffer);
+    let uuid = Uuid::new_v4();
+    (Sender::new(tx, uuid), Receiver::new(rx, uuid))
 }
 
-pub struct Sender<T>(Instrumented<mpsc::Sender<T>>);
-
-impl<T> From<Instrumented<mpsc::Sender<T>>> for Sender<T> {
-    fn from(value: Instrumented<mpsc::Sender<T>>) -> Self {
-        Self(value)
-    }
+#[derive(Clone, Debug)]
+pub struct Sender<T> {
+    tx: Instrumented<mpsc::Sender<T>>,
+    span: Span
 }
 
 impl<T> Sender<T> {
+    pub fn new(tx: mpsc::Sender<T>, uuid: Uuid) -> Self {
+        let span = debug_span!("mpsc-tx",
+                               uuid = tools::base64_text(uuid.as_bytes()));
+        Self { tx: tx.instrument(span.clone()), span }
+    }
+
     pub async fn send(&self, value: T) -> Result<(), SendError<T>> {
-        self.0.inner().send(value).await
+        debug!(parent: &self.span, "Sending value");
+        self.tx.inner().send(value).await
     }
 }
 
-pub struct Receiver<T>(Instrumented<mpsc::Receiver<T>>);
-
-impl<T> From<Instrumented<mpsc::Receiver<T>>> for Receiver<T> {
-    fn from(value: Instrumented<mpsc::Receiver<T>>) -> Self {
-        Self(value)
-    }
+#[derive(Debug)]
+pub struct Receiver<T> {
+    rx: Instrumented<mpsc::Receiver<T>>,
+    span: Span
 }
 
 impl<T> Receiver<T> {
+    pub fn new(rx: mpsc::Receiver<T>, uuid: Uuid) -> Self {
+        let span = debug_span!("mpsc-rx",
+                               uuid = tools::base64_text(uuid.as_bytes()));
+
+        Self { rx: rx.instrument(span.clone()), span }
+    }
+
     pub async fn recv(&mut self) -> Option<T> {
-        self.0.inner_mut().recv().await
+        let value = self.rx.inner_mut().recv().await;
+        debug!(parent: &self.span, "Maybe received value");
+        value
     }
 
     pub fn close(&mut self) {
-        self.0.inner_mut().close()
+        self.rx.inner_mut().close()
     }
 }
