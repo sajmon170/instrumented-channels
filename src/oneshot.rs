@@ -14,7 +14,7 @@ use std::{
 
 use tokio::sync::oneshot::{self, error::RecvError};
 use uuid::Uuid;
-use pin_project::pin_project;
+use pin_project_lite::pin_project;
 
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let (tx, rx) = oneshot::channel::<T>();
@@ -41,12 +41,13 @@ impl<T> Sender<T> {
     }
 }
 
-#[derive(Debug)]
-#[pin_project]
-pub struct Receiver<T> {
-    #[pin]
-    rx: Instrumented<oneshot::Receiver<T>>,
-    span: Span
+pin_project! {
+    #[derive(Debug)]
+    pub struct Receiver<T> {
+        #[pin]
+        rx: Instrumented<oneshot::Receiver<T>>,
+        span: Span
+    }
 }
 
 impl<T> Future for Receiver<T> {
