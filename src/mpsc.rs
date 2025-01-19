@@ -4,9 +4,12 @@ use tracing::{
     instrument::{Instrument, Instrumented}
 };
 
+use crate::tools;
+
 pub fn channel<T>(buffer: usize) -> (Sender<T>, Receiver<T>) {
     let (sender, receiver) = mpsc::channel::<T>(buffer);
-    let span = debug_span!("mpsc");
+    let uuid = uuid::Uuid::new_v4();
+    let span = debug_span!("mpsc", uuid = tools::base64_text(uuid.as_bytes()));
     (sender.instrument(span.clone()).into(), receiver.instrument(span).into())
 }
 

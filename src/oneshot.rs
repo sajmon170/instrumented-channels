@@ -10,11 +10,14 @@ use std::{
     task::{Context, Poll}
 };
 
+use crate::tools;
+
 use pin_project::pin_project;
 
 pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
     let (sender, receiver) = oneshot::channel::<T>();
-    let span = debug_span!("oneshot");
+    let uuid = uuid::Uuid::new_v4();
+    let span = debug_span!("oneshot", uuid = tools::base64_text(uuid.as_bytes()));
     (sender.instrument(span.clone()).into(), receiver.instrument(span).into())
 }
 
