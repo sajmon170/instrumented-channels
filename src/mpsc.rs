@@ -3,10 +3,11 @@ use crate::tools;
 use tracing::{
     debug_span, Span,
     debug,
+    warn,
     instrument::{Instrument, Instrumented}
 };
 
-use tokio::sync::mpsc::{self, error::SendError};
+use tokio::sync::mpsc::{self, error::{SendError, TrySendError}};
 use uuid::Uuid;
 
 pub fn channel<T>(buffer: usize) -> (Sender<T>, Receiver<T>) {
@@ -30,7 +31,17 @@ impl<T> Sender<T> {
 
     pub async fn send(&self, value: T) -> Result<(), SendError<T>> {
         debug!(parent: &self.span, "Sending value");
-        self.tx.inner().send(value).await
+
+        match self.tx.inner().try_send(value) {
+            Ok(()) => Ok(()),
+            Err(e) => match e {
+                TrySendError::Closed(value) => Err(SendError(value)),
+                TrySendError::Full(value) => {
+                    warn!(parent: &self.span, "Channel is full. Retrying...");
+                    self.tx.inner().send(value).await
+                }
+            }
+        }
     }
 }
 
