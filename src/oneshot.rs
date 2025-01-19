@@ -49,3 +49,9 @@ impl<T> Future for Receiver<T> {
         this.0.poll(cx)
     }
 }
+
+impl<T> Receiver<T> {
+    pub fn close(&mut self) {
+        self.0.inner_mut().close()
+    }
+}

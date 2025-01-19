@@ -36,4 +36,8 @@ impl<T> Receiver<T> {
     pub async fn recv(&mut self) -> Option<T> {
         self.0.inner_mut().recv().await
     }
+
+    pub fn close(&mut self) {
+        self.0.inner_mut().close()
+    }
 }
